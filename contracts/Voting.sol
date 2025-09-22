@@ -9,12 +9,15 @@ contract Voting {
 
     address public owner;
     Candidate[] public candidates;
-    mapping(address => bool) public hasVoted;
+    mapping(address => uint) public lastVotingRound;
+    uint public currentVotingRound;
     bool public votingEnded;
 
     event CandidateAdded(string name, uint candidateIndex);
     event VoteCast(address voter, uint candidateIndex);
     event VotingEnded(string winner);
+    event VotingStarted();
+    event VotingReset();
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner can perform this action");
@@ -27,12 +30,13 @@ contract Voting {
     }
 
     modifier hasNotVoted() {
-        require(!hasVoted[msg.sender], "You have already voted");
+        require(lastVotingRound[msg.sender] != currentVotingRound, "You have already voted in this round");
         _;
     }
 
     constructor() {
         owner = msg.sender;
+        currentVotingRound = 1; // Start with round 1 so new addresses can vote
     }
 
     function addCandidate(string memory name) public onlyOwner votingActive {
@@ -44,7 +48,7 @@ contract Voting {
     function vote(uint candidateIndex) public votingActive hasNotVoted {
         require(candidateIndex < candidates.length, "Invalid candidate index");
         
-        hasVoted[msg.sender] = true;
+        lastVotingRound[msg.sender] = currentVotingRound;
         candidates[candidateIndex].voteCount++;
         
         emit VoteCast(msg.sender, candidateIndex);
@@ -83,7 +87,32 @@ contract Voting {
         emit VotingEnded(winner);
     }
 
+    function startVoting() public onlyOwner {
+        require(votingEnded, "Voting is already active");
+        votingEnded = false;
+        emit VotingStarted();
+    }
+
+    function resetVoting() public onlyOwner {
+        // Reset all vote counts to 0
+        for (uint i = 0; i < candidates.length; i++) {
+            candidates[i].voteCount = 0;
+        }
+        
+        // Increment voting round to allow previous voters to vote again
+        currentVotingRound++;
+        
+        // Reset voting status
+        votingEnded = false;
+        
+        emit VotingReset();
+    }
+
     function getVotingStatus() public view returns (bool) {
         return votingEnded;
+    }
+
+    function getCurrentVotingRound() public view returns (uint) {
+        return currentVotingRound;
     }
 }

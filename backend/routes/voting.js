@@ -98,15 +98,16 @@ router.post('/vote', validateAddress, async (req, res, next) => {
       return res.status(400).json({ error: 'Voting has ended' });
     }
 
-    // Check if user has already voted
+    // Check if user has already voted in current round
     try {
-      const hasVoted = await contract.methods.hasVoted(address).call();
-      if (hasVoted) {
-        return res.status(400).json({ error: 'You have already voted' });
+      const lastVotingRound = await contract.methods.lastVotingRound(address).call();
+      const currentVotingRound = await contract.methods.getCurrentVotingRound().call();
+      if (parseInt(lastVotingRound) === parseInt(currentVotingRound)) {
+        return res.status(400).json({ error: 'You have already voted in this round' });
       }
     } catch (error) {
-      console.log('Error checking hasVoted, proceeding with vote:', error.message);
-      // Continue with voting if we can't check hasVoted status
+      console.log('Error checking voting round, proceeding with vote:', error.message);
+      // Continue with voting if we can't check voting round status
     }
 
     // Get candidate count to validate index
@@ -181,6 +182,55 @@ router.post('/end-voting', async (req, res, next) => {
       success: true, 
       message: 'Voting ended successfully',
       winner: winner,
+      transactionHash: result.transactionHash
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /start-voting - Start voting (only owner)
+router.post('/start-voting', async (req, res, next) => {
+  try {
+    console.log('Starting voting...');
+    
+    const votingEnded = await contract.methods.getVotingStatus().call();
+    if (!votingEnded) {
+      return res.status(400).json({ error: 'Voting is already active' });
+    }
+
+    const result = await contract.methods.startVoting().send({
+      from: CONTRACT_CONFIG.ownerAccount,
+      gas: 300000
+    });
+
+    console.log(`Voting started successfully. Transaction hash: ${result.transactionHash}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Voting started successfully',
+      transactionHash: result.transactionHash
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /reset-voting - Reset voting (only owner)
+router.post('/reset-voting', async (req, res, next) => {
+  try {
+    console.log('Resetting voting...');
+    
+    const result = await contract.methods.resetVoting().send({
+      from: CONTRACT_CONFIG.ownerAccount,
+      gas: 300000
+    });
+
+    console.log(`Voting reset successfully. Transaction hash: ${result.transactionHash}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Voting reset successfully - all vote counts cleared and voting restarted',
       transactionHash: result.transactionHash
     });
   } catch (error) {
